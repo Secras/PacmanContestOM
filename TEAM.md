@@ -38,12 +38,29 @@ When ghosts get scared:
 - Make the defensive agent go in attack.
 
 **Offensive**
+
 How to find food?
+- (DONE) Try to find food clusters, first near the edge.
 - Don't get too greedy, how far is it to the next food cluster and how far is it back?
-- Try to find food first near the edge 
 - When he eats a power capsule he gets greedy and is allowed further back, until he eats a ghost, then the timer gets reduced on the amount of team he has left to get back to base.
 
 When to go back?
-- If we have the min amount of food then go back over the edge.
-- If we don't have any food then try to find food and run away from the ghosts but still inside the enemy area.
+- (DONE) If we have the min amount of food then go back over the edge.
+- (DONE) If we don't have any food then try to find food and run away from the ghosts but still inside the enemy area.
+- Avoid getting stuck in a corner when running away from ghosts.
+
+Completed Strategy:
+- We rank the food clusters based on their size (how many food items there are in a cluster), and also their location (how far they are inside the enemy base)
+- We start by going to the biggest food cluster that is closest to the edge of the enemy base
+- If PacMan eats 4 food items in a row, we go back to our base with the food
+- If we are in the enemy base, and we see a ghost, we run away from the ghost (doesn't matter to where now)
+- Keeping record and analysing if the PacMan gets stuck in the same location
+  - Then I change food cluster he should go to next
+  - Works Okay.. but not great
+
+TODO:
+- Make the capsule functionality, so the PacMan is not scared of the ghosts when he eats a capsule
+  - Also increase or disable any food limits
+- Big thing is to find an algorithm to rank or make sure the PacMan when fleeing from a ghost doesn't go into a corner where he can't get out.
+  - Or basically make a better escape plan when ghost is nearby
 - 

@@ -12,6 +12,7 @@ import contest.util as util
 from contest.capture_agents import CaptureAgent
 from contest.game import Directions
 from contest.util import nearest_point
+from contest.util import manhattan_distance
 
 
 #################
@@ -139,30 +140,73 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
     def __init__(self, index, time_for_computing=.1):
         super().__init__(index, time_for_computing)
         self.food_eaten = 0
+        self.chosen_food = None
+        self.countdown = 3
+        self.target_cluster_index = 0
 
-    def register_initial_state(self, game_state):
-        super().register_initial_state(game_state)
-        self.food_eaten = 0
+        self.positions_record = []
+        self.record_threshold = 10
+        self.agent_stuck = False
+        self.cooldown = 0  # Cooldown period to avoid frequent analysis
+        self.cooldown_threshold = 10  # Number of steps to wait before re-analysis
+
+    def update_recent_positions(self, position):
+        # Update the list of recent positions
+        self.positions_record.append(position)
+        if len(self.positions_record) > self.record_threshold:
+            self.positions_record.pop(0)  # Maintain a fixed size
+
+    def analyse_movement(self):
+        if self.cooldown > 0:
+            self.cooldown -= 1
+            return
+
+        if len(self.positions_record) < self.record_threshold:
+            return
+
+        # Check if the agent is moving in the same four locations
+        if len(set(self.positions_record[-4:])) == 1:
+            self.agent_stuck = True
+            return
+
+        # Check for looping patterns (e.g., same sequence of moves)
+        for i in range(1, len(self.positions_record) // 2 + 1):
+            if self.positions_record[-i:] == self.positions_record[-2 * i:-i]:
+                self.agent_stuck = True
+                return
+
+        self.agent_stuck = False
 
     def choose_action(self, game_state):
+        """
+        Picks among the actions with the highest Q(s,a).
+        """
+        # Analyse the agent's movement
+        curr_pos = game_state.get_agent_position(self.index)
+        self.update_recent_positions(curr_pos)
+        self.analyse_movement()
+
+        is_pacman = game_state.get_agent_state(self.index).is_pacman
+        if self.agent_stuck and not is_pacman and self.cooldown == 0:
+            print('Agent is stuck.')
+            self.target_cluster_index = (self.target_cluster_index + 1) % 3
+            print('Target cluster index:', self.target_cluster_index)
+            self.cooldown = self.cooldown_threshold
+
         actions = game_state.get_legal_actions(self.index)
+
+        # You can profile your evaluation time by uncommenting these lines
+        # start = time.time()
         values = [self.evaluate(game_state, a) for a in actions]
+
+        # print 'eval time for agent %d: %.4f' % (self.index, time.time() - start)
+
         max_value = max(values)
         best_actions = [a for a, v in zip(actions, values) if v == max_value]
 
-        chosen_action = random.choice(best_actions)
-        successor = self.get_successor(game_state, chosen_action)
-        my_pos = successor.get_agent_state(self.index).get_position()
+        food_left = len(self.get_food(game_state).as_list())
 
-        # Check if the agent has eaten food
-        if my_pos in self.get_food(game_state).as_list():
-            self.food_eaten += 1
-
-        if not successor.get_agent_state(self.index).is_pacman:
-            self.food_eaten = 0
-
-        # Return back to our base if more than 4 food items have been eaten
-        if self.food_eaten > 4:
+        if food_left <= 2:
             best_dist = 9999
             best_action = None
             for action in actions:
@@ -174,26 +218,144 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
                     best_dist = dist
             return best_action
 
-        # Otherwise search for more food
-        return chosen_action
+        action_to_take = random.choice(best_actions)
+
+        return action_to_take
+
+    def form_food_clusters(self, food_list, distance_threshold):
+        clusters = []
+
+        for food in food_list:
+            added_to_cluster = False
+
+            # Try to add the food to an existing cluster
+            for cluster in clusters:
+                if any(manhattan_distance(food, existing_food) <= distance_threshold for existing_food in cluster):
+                    cluster.append(food)
+                    added_to_cluster = True
+                    break
+
+            # If no cluster is close enough, create a new cluster
+            if not added_to_cluster:
+                clusters.append([food])
+
+        return clusters
+
+    def rank_clusters(self, clusters, my_pos, is_red_team, w1=1, w2=1, w3=1):
+        ranked_clusters = []
+
+        for cluster in clusters:
+            # Calculate distances for all food items in the cluster
+            distances = [self.get_maze_distance(my_pos, food) for food in cluster]
+            min_distance = min(distances)
+            cluster_size = len(cluster)
+            edge_proximity_score = 0
+
+            # Calculate the X-priority score (proximity to the desired edge)
+            if is_red_team:
+                # Red team prioritizes lower X-values
+                edge_proximity_score = sum(-food[0] for food in cluster) / cluster_size
+            else:
+                # Blue team prioritizes higher X-values
+                edge_proximity_score = sum(food[0] for food in cluster) / cluster_size
+
+            # Compute weighted score
+            score = (w1 / min_distance) + (w2 * cluster_size) + (w3 * edge_proximity_score)
+
+
+            cluster.sort(key=lambda f: manhattan_distance(my_pos, f))
+
+            # Add cluster details
+            ranked_clusters.append({
+                "score": score,
+                "cluster": cluster,
+                "min_distance": min_distance,
+                "size": cluster_size,
+                "edge_proximity_score": edge_proximity_score
+            })
+
+        # Sort clusters by score
+        ranked_clusters.sort(key=lambda x: -x["score"])
+
+        return ranked_clusters
+
+    def ghost_threat(self, successor):
+        enemies = [successor.get_agent_state(i) for i in self.get_opponents(successor)]
+        invaders = [a for a in enemies if not a.is_pacman and a.get_position() is not None]
+
+        if len(invaders) > 0:
+            dists = [self.get_maze_distance(successor.get_agent_state(self.index).get_position(), a.get_position()) for a in invaders]
+            return 1.0 / min(dists)  # Higher threat as the ghost gets closer
+        return 0
+
+    def ghost_distance(self, successor):
+        enemies = [successor.get_agent_state(i) for i in self.get_opponents(successor)]
+        invaders = [a for a in enemies if not a.is_pacman and a.get_position() is not None]
+
+        if len(invaders) > 0:
+            dists = [self.get_maze_distance(successor.get_agent_state(self.index).get_position(), a.get_position()) for a in invaders]
+            return min(dists)
+        return 0
 
     def get_features(self, game_state, action):
         features = util.Counter()
         successor = self.get_successor(game_state, action)
+        next_pos = successor.get_agent_state(self.index).get_position()
+        my_pos = game_state.get_agent_state(self.index).get_position()
+
+        # Check if the agent has eaten food
+        if next_pos in self.get_food(game_state).as_list():
+            self.food_eaten += 1
+
+        if not game_state.get_agent_state(self.index).is_pacman:
+            self.food_eaten = 0
+
+        # Compute distance to the nearest food item
         food_list = self.get_food(successor).as_list()
-        features['successor_score'] = -len(food_list)  # self.getScore(successor)
+        food_clusters = self.form_food_clusters(food_list, 3)
+        ranked_clusters = self.rank_clusters(food_clusters, successor.get_agent_state(self.index).get_position(), self.red)
 
-        # Compute distance to the nearest food
+        features['successor_score'] = -len(food_list)  # self.get_score(successor)
 
-        if len(food_list) > 0:  # This should always be True,  but better safe than sorry
+        # Compute distance to the nearest ghost
+        features['ghost_threat'] = self.ghost_threat(successor)
+
+        # Penalize actions that move closer to the ghost
+        features['distance_to_ghost'] = self.ghost_distance(successor)
+
+        # Compute distance to the nearest food item
+        if len(food_list) > 0:
             my_pos = successor.get_agent_state(self.index).get_position()
-            min_distance = min([self.get_maze_distance(my_pos, food) for food in food_list])
-            features['distance_to_food'] = min_distance
+
+            if self.countdown == 0 or self.chosen_food is None:
+                nearest_food = ranked_clusters[self.target_cluster_index]["cluster"][0]
+                self.chosen_food = nearest_food
+                self.countdown = 3
+            else:
+                self.countdown -= 1
+
+            # print('Nearest food:', self.chosen_food)
+            features['distance_to_food'] = self.get_maze_distance(my_pos, self.chosen_food)
+            # print('Distance to food:', features['distance_to_food'])
+
+        if self.food_eaten > 3:
+            features['distance_to_food'] = self.get_maze_distance(my_pos, self.start)
+
+        # Add feature to return to start if ghost is nearby and food eaten is at least 2
+        if features['ghost_threat'] > 0 and self.food_eaten >= 2:
+            features['return_to_start'] = self.get_maze_distance(my_pos, self.start)
+            features['distance_to_food'] = 0
+            features['successor_score'] = 0
 
         return features
 
     def get_weights(self, game_state, action):
-        return {'successor_score': 100, 'distance_to_food': -1}
+        return {'find_more_food': 0,
+                'successor_score': 100,
+                'distance_to_food': -1,
+                'ghost_threat': 1000,
+                'distance_to_ghost': 1000,
+                'return_to_start': -1000}
 
 
 class DefensiveReflexAgent(ReflexCaptureAgent):
