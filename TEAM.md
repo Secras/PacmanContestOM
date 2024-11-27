@@ -54,13 +54,7 @@ Completed Strategy:
 - We start by going to the biggest food cluster that is closest to the edge of the enemy base
 - If PacMan eats 4 food items in a row, we go back to our base with the food
 - If we are in the enemy base, and we see a ghost, we run away from the ghost (doesn't matter to where now)
-- Keeping record and analysing if the PacMan gets stuck in the same location
-  - Then I change food cluster he should go to next
-  - Works Okay.. but not great
 
 TODO:
-- Make the capsule functionality, so the PacMan is not scared of the ghosts when he eats a capsule
-  - Also increase or disable any food limits
 - Big thing is to find an algorithm to rank or make sure the PacMan when fleeing from a ghost doesn't go into a corner where he can't get out.
   - Or basically make a better escape plan when ghost is nearby
-- 
