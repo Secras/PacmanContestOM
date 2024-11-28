@@ -12,7 +12,8 @@ import contest.util as util
 from contest.capture_agents import CaptureAgent
 from contest.game import Directions
 from contest.util import nearest_point
-from contest.util import manhattan_distance
+import time, math
+from util import manhattan_distance
 
 
 #################
@@ -35,12 +36,485 @@ def create_team(first_index, second_index, is_red,
     any extra arguments, so you should make sure that the default
     behavior is what you want for the nightly contest.
     """
-    return [eval(first)(first_index), eval(second)(second_index)]
+    return [DefensiveAgent(first_index), OffensiveReflexAgent(second_index)]
 
+########################################
+# Markus Part #
 
-##########
-# Agents #
-##########
+class SearchProblem:
+   
+    def get_start_state(self):
+        util.raise_not_defined()
+
+    def is_goal_state(self, state):
+        util.raise_not_defined()
+
+    def get_successors(self, state):
+        util.raise_not_defined()
+
+    def get_cost_of_actions(self, actions):
+        util.raise_not_defined()
+
+class PositionSearchProblem(SearchProblem):
+
+    def __init__(self, game_state, cost_fn = lambda x: 1, goal=(1, 1), start=(0,0), warn=True, visualize=False):
+        """
+        Stores the start and goal.
+
+        game_state: A GameState obj (pacman.py)
+        cost_fn: A function from a search state (tuple) to a non-negative number
+        goal: A position in the game_state
+        """
+        self.walls = game_state.get_walls()
+        self.startState = start
+        self.goal = goal
+        self.cost_fn = cost_fn
+
+        
+    def get_start_state(self):
+        return self.startState
+
+    def is_goal_state(self, state):
+        is_goal = state == self.goal
+
+        return is_goal
+
+    def get_successors(self, state):
+        """
+        Returns successor states, the actions they require, and a cost of 1.
+
+         As noted in search.py:
+             For a given state, this should return a list of triples,
+         (successor, action, stepCost), where 'successor' is a
+         successor to the current state, 'action' is the action
+         required to get there, and 'stepCost' is the incremental
+         cost of expanding to that successor
+        """
+
+        successors = []
+        directions = {Directions.NORTH: (0, 1),
+                   Directions.SOUTH: (0, -1),
+                   Directions.EAST:  (1, 0),
+                   Directions.WEST:  (-1, 0),
+                   Directions.STOP:  (0, 0)}
+        for action in [Directions.NORTH, Directions.SOUTH, Directions.EAST, Directions.WEST]:
+            x,y = state
+            dx, dy = directions[action]
+            next_x, next_y = int(x + dx), int(y + dy)
+            if not self.walls[next_x][next_y]:
+                next_state = (next_x, next_y)
+                cost = self.cost_fn(next_state)
+                successors.append( ( next_state, action, cost) )
+
+        return successors
+
+    def get_cost_of_actions(self, actions):
+        """
+        Returns the cost of a particular sequence of actions. If those actions
+        include an illegal move, return 999999.
+        """
+        if actions is None: return 999999
+        x,y= self.get_start_state()
+        cost = 0
+        for action in actions:
+            # Check figure out the next state and see whether its' legal
+            dx, dy = Actions.direction_to_vector(action)
+            x, y = int(x + dx), int(y + dy)
+            if self.walls[x][y]: return 999999
+            cost += self.cost_fn((x, y))
+        return cost
+
+class SearchNode:
+    def __init__(self, parent, node_info):
+        """
+            parent: parent SearchNode.
+
+            node_info: tuple with three elements => (coord, action, cost)
+
+            coord: (x,y) coordinates of the node position
+
+            action: Direction of movement required to reach node from
+            parent node. Possible values are defined by class Directions from
+            game.py
+
+            cost: cost of reaching this node from the starting node.
+        """
+
+        self.__state = node_info[0]
+        self.action = node_info[1]
+        self.cost = node_info[2] if parent is None else node_info[2] + parent.cost
+        self.parent = parent
+
+    # The coordinates of a node cannot be modified, se we just define a getter.
+    # This allows the class to be hashable.
+    @property
+    def state(self):
+        return self.__state
+
+    def get_path(self):
+        path = []
+        current_node = self
+        while current_node.parent is not None:
+            path.append(current_node.action)
+            current_node = current_node.parent
+        path.reverse()
+        return path
+    
+    # Consider 2 nodes to be equal if their coordinates are equal (regardless of everything else)
+    # def __eq__(self, __o: obj) -> bool:
+    #     if (type(__o) is SearchNode):
+    #         return self.__state == __o.__state
+    #     return False
+
+    # # def __hash__(self) -> int:
+    # #     return hash(self.__state)
+
+def depth_first_search(problem):
+    """
+    Search the deepest nodes in the search tree first.
+
+    Your search algorithm needs to return a list of actions that reaches the
+    goal. Make sure to implement a graph search algorithm.
+
+    To get started, you might want to try some of these simple commands to
+    understand the search problem that is being passed in:
+
+    print("Start:", problem.get_start_state())
+    print("Is the start a goal?", problem.is_goal_state(problem.get_start_state()))
+    print("Start's successors:", problem.get_successors(problem.get_start_state()))
+    """
+    "*** YOUR CODE HERE ***"
+    start = SearchNode(None, (problem.get_start_state(), 'Stop', 0))
+    stack = util.Stack()
+    visited = set()
+
+    stack.push(start)
+
+    while not stack.is_empty():
+        current_node = stack.pop()
+        if problem.is_goal_state(current_node.state):  # Reached the goal so return the path
+            return current_node.get_path()
+        if current_node.state not in visited:
+            visited.add(current_node.state)
+            for successor in problem.get_successors(current_node.state):
+                stack.push(SearchNode(current_node, successor))
+
+def breadth_first_search(problem):
+    """Search the shallowest nodes in the search tree first."""
+    "*** YOUR CODE HERE ***"
+    start = SearchNode(None, (problem.get_start_state(), None, 0))
+    queue = util.Queue()
+    visited = set()
+
+    queue.push(start)
+
+    while not queue.is_empty():
+        current_node = queue.pop()
+        if problem.is_goal_state(current_node.state):
+            return current_node.get_path()
+        if current_node.state not in visited:
+            visited.add(current_node.state)
+            for successor in problem.get_successors(current_node.state):
+                queue.push(SearchNode(current_node, successor))
+
+def uniform_cost_search(problem):
+    """Search the node of least total cost first."""
+    "*** YOUR CODE HERE ***"
+    start = SearchNode(None, (problem.get_start_state(), None, 0))
+    queue = util.PriorityQueue()
+    visited = set()
+
+    queue.push(start, 0)
+
+    while not queue.is_empty():
+        current_node = queue.pop()
+        if problem.is_goal_state(current_node.state):
+            return current_node.get_path()
+        if current_node.state not in visited:
+            visited.add(current_node.state)
+
+            for successor in problem.get_successors(current_node.state):
+                successor_node = SearchNode(current_node, successor)
+
+                path = successor_node.get_path()
+                cost = problem.get_cost_of_actions(path)
+                queue.update(successor_node, cost)
+
+def null_heuristic(state, problem=None):
+    """
+    A heuristic function estimates the cost from the current state to the nearest
+    goal in the provided SearchProblem.  This heuristic is trivial.
+    """
+    return 0
+
+def a_star_search(problem, heuristic=null_heuristic):
+    """Search the node that has the lowest combined cost and heuristic first."""
+    "*** YOUR CODE HERE ***"
+    start = SearchNode(None, (problem.get_start_state(), None, 0))
+    queue = util.PriorityQueue()
+    visited = set()
+
+    queue.push(start, 0)
+
+    while not queue.is_empty():
+        current_node = queue.pop()
+        if problem.is_goal_state(current_node.state):
+            return current_node.get_path()
+        if current_node.state not in visited:
+            visited.add(current_node.state)
+
+            for successor in problem.get_successors(current_node.state):
+                successor_node = SearchNode(current_node, successor)
+
+                path = successor_node.get_path()
+                cost = problem.get_cost_of_actions(path) + heuristic(successor_node.state,problem)
+                queue.update(successor_node, cost)
+
+class MinState():
+    
+    def __init__(self, grid, positions):
+        # self.grid = self.transform_grid(grid)
+        self.grid = grid
+        self.positions = positions
+        
+    def to_bool(self, string):
+        if string == 'T':
+            return True
+        elif string == 'F':
+            return False
+        
+    def transform_grid(self, grid):
+        return [self.to_bool(cell) for row in grid.split("\n") for cell in row.split()]
+        
+    def generate_successor(self, agent_index, action):
+        if action == 'North':
+            self.positions[agent_index] = (self.positions[agent_index][0], self.positions[agent_index][1]+1)
+        elif action == 'East':
+            self.positions[agent_index] = (self.positions[agent_index][0]+1, self.positions[agent_index][1])
+        elif action == 'South':
+            self.positions[agent_index] = (self.positions[agent_index][0], self.positions[agent_index][1]-1)
+        elif action == 'West':
+            self.positions[agent_index] = (self.positions[agent_index][0]-1, self.positions[agent_index][1])
+            
+        return self
+        
+        
+    def get_legal_actions(self, agent_index):
+        directions = []
+        pos_x = int(self.positions[agent_index][0])
+        pos_y = int(self.positions[agent_index][1])
+        # if not len(self.grid[pos_x]) == pos_y and not self.grid[pos_x][pos_y+1]:
+        #     directions.append('North')
+        # elif not len(self.grid) == pos_x and not self.grid[pos_x+1][pos_y]:
+        #     directions.append('East')
+        # elif not pos_y == 0 and not self.grid[pos_x][pos_y-1]:
+        #     directions.append('South')
+        # elif not pos_x == 0 and not self.grid[pos_x-1][pos_y]:
+        #     directions.append('West')
+        if not self.grid[pos_x][pos_y+1]:
+            directions.append('North')
+        elif not self.grid[pos_x+1][pos_y]:
+            directions.append('East')
+        elif not self.grid[pos_x][pos_y-1]:
+            directions.append('South')
+        elif not self.grid[pos_x-1][pos_y]:
+            directions.append('West')
+        
+        return directions
+
+class DefensiveAgent(CaptureAgent):
+    
+    def __init__(self, index, time_for_computing=0.1):
+        super().__init__(index, time_for_computing)
+        self.features = {}
+        self.max_depth = 5
+    
+    
+    def choose_action(self, game_state):
+        my_pos = game_state.get_agent_state(self.index).get_position()
+        enemies = [game_state.get_agent_state(i) for i in self.get_opponents(game_state)]
+        invaders = [a for a in enemies if a.is_pacman and a.get_position() is not None]
+        if len(invaders) > 0:
+            invaders.sort(key= lambda x: self.get_maze_distance(my_pos, x.get_position()))
+            self.features['dest'] = invaders[0].get_position()
+        if len(invaders) == 1:
+            # print("-----------------------------")
+            # I see one enemy
+            if util.manhattan_distance(my_pos, invaders[0].get_position()) == 1:
+                return self.get_direction_enemy(my_pos, invaders[0].get_position())
+            legal_actions = game_state.get_legal_actions(0)
+            max_action = 'Stop'
+            max_value = float('-inf')
+            for action in legal_actions:
+                enemy_pos = invaders[0].get_position()
+                new_pos = self.get_successor(game_state, action).get_agent_state(self.index).get_position()
+                successor = MinState(game_state.get_walls(), 
+                                   [new_pos, enemy_pos])
+                minimax_value = self.minimax(successor, 1, 0, self.max_depth)
+                # print("---")
+                # print(minimax_value)
+                # print(action)
+                # print("---")
+                if  minimax_value > max_value:
+                    max_value = minimax_value
+                    max_action = action
+            # print(max_action)
+            # time.sleep(5)
+            return max_action
+        elif len(invaders) == 2:
+            # I see two enemies
+            invaders.sort(key= lambda x: self.get_maze_distance(my_pos, x.get_position()))
+            nearest_enemy = invaders[0].get_position()
+            legal_actions = game_state.get_legal_actions(0)
+            max_action = 'Stop'
+            max_value = float('-inf')
+            for action in legal_actions:
+                enemy_pos = nearest_enemy.get_position()
+                new_pos = self.get_successor(game_state, action).get_agent_state(self.index).get_position()
+                successor = MinState(game_state.get_walls(), 
+                                   [new_pos, enemy_pos])
+                minimax_value = self.minimax(successor, 1, 0, self.max_depth)
+                # print("---")
+                # print(minimax_value)
+                # print(action)
+                # print("---")
+                if  minimax_value > max_value:
+                    max_value = minimax_value
+                    max_action = action
+            return max_action
+        else:
+            # I don't see an enemy 
+            if self.compare_foods(game_state):
+                # food was eaten => go to the crime scene
+                self.features['dest'] = self.compare_foods
+            if self.features.get('dest', my_pos) == my_pos:
+                # I have a previous goal
+                do = True
+                next_dest = None
+                while do or next_dest == my_pos:
+                    do = False
+                    # next_dest = self.pick_next_food(game_state)
+                    next_dest = random.choice(self.get_food_you_are_defending(game_state).as_list())
+                self.features['dest'] = next_dest
+            path = breadth_first_search(PositionSearchProblem(game_state, 
+                                                              goal=self.features['dest'], 
+                                                              start=my_pos, 
+                                                              visualize=False))
+            if path == None:
+                self.features['dest'] = my_pos
+                return 'Stop'
+            return path[0]
+        
+    def get_direction_enemy(self, my_pos, enemy_pos):
+        if my_pos[1] == enemy_pos[1]:
+            if my_pos[0] < enemy_pos[0]:
+                return 'East'
+            elif my_pos[0] > enemy_pos[0]:
+                return 'West'
+            else:
+                return 'Stop'
+        elif my_pos[0] == enemy_pos[0]:
+            if my_pos[1] < enemy_pos[1]:
+                return 'North'
+            elif my_pos[1] > enemy_pos[1]:
+                return 'South'
+            else:
+                return 'Stop'
+        else:
+            return 'Stop'
+        
+    def pick_next_food(self, game_state):
+        """Pick the next food to patrol to."""
+        distances = {}
+        my_pos = game_state.get_agent_state(self.index).get_position()
+        for food in self.get_food_you_are_defending(game_state).as_list():
+            distances[food] = min([abs(util.manhattan_distance(my_pos, food) - game_state.get_agent_distances()[enemy_ind]) 
+                                  for enemy_ind in self.get_opponents(game_state)])
+        min_dist = float('+inf')
+        next_food = (0,0)
+        for food, distance in distances.items():
+            if distance < min_dist:
+                next_food = food
+                min_dist = distance
+        return next_food
+        
+    def minimax(self, min_state: MinState, agent_index, current_depth, max_depth):
+        """minimax for two agents: agent 0 is max, agent 1 is min
+
+        Args:
+            game_state (_type_): _description_
+            current_depth (_type_): _description_
+            agent_index (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        next_depth = current_depth
+        next_agent = agent_index
+        if agent_index == 1:
+            # last eval for this depth => next depth in next call
+            next_agent = 0
+            next_depth += 1
+        else:
+            next_agent += 1
+        if current_depth == max_depth:
+            return self.evaluation_function(min_state)
+        legal_actions = min_state.get_legal_actions(agent_index)
+        action_evals = [self.minimax(min_state.generate_successor(agent_index, action), 
+                                     next_agent, 
+                                     next_depth,
+                                     max_depth) for action in legal_actions]
+        if agent_index == self.index:
+            # pacman moves (MAX)
+            return max(action_evals)
+        else:
+            # one of the ghosts moves (MIN)
+            return min(action_evals)
+        
+    def evaluation_function(self, min_state):
+        # print((-1) * util.manhattan_distance(min_state.positions[0], min_state.positions[1]))
+        return (-1) * self.get_maze_distance(min_state.positions[0], min_state.positions[1])
+        # return (-1) * util.manhattan_distance(min_state.positions[0], min_state.positions[1])
+        
+    def get_successor(self, game_state, action):
+        """
+        Finds the next successor which is a grid position (location tuple).
+        """
+        successor = game_state.generate_successor(self.index, action)
+        pos = successor.get_agent_state(self.index).get_position()
+        if pos != nearest_point(pos):
+            # Only half a grid position was covered
+            return successor.generate_successor(self.index, action)
+        else:
+            return successor
+        
+    def compare_foods(self, game_state):
+        current_food = set(self.get_food_you_are_defending(game_state).as_list())
+        diff = self.features.get('prev_food', current_food) - current_food
+        if diff != set():
+            # some food was eaten
+            return diff.pop()
+        else:
+            return False
+
+    def breadth_first_search(problem):
+        start = SearchNode(None, (problem.get_start_state(), None, 0))
+        queue = util.Queue()
+        visited = set()
+
+        queue.push(start)
+
+        while not queue.is_empty():
+            current_node = queue.pop()
+            if problem.is_goal_state(current_node.state):
+                return current_node.get_path()
+            if current_node.state not in visited:
+                visited.add(current_node.state)
+                for successor in problem.get_successors(current_node.state):
+                    queue.push(SearchNode(current_node, successor))
+                    
+##############################################
+# Oliver's Part#
 
 class ReflexCaptureAgent(CaptureAgent):
     """
@@ -86,12 +560,12 @@ class ReflexCaptureAgent(CaptureAgent):
 
         action_to_take = random.choice(best_actions)
         is_red = self.red
-        print('Is red: ', is_red)
+        # print('Is red: ', is_red)
         if (is_red and action_to_take == Directions.EAST) or (not is_red and action_to_take == Directions.WEST):
             self.from_start += 1
 
-        print("Action to take: ", action_to_take)
-        print("From start: ", self.from_start)
+        # print("Action to take: ", action_to_take)
+        # print("From start: ", self.from_start)
         return action_to_take
 
     def get_successor(self, game_state, action):
@@ -288,7 +762,7 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
         if ghost_distance > 0 and not self.capsule_active:
             max_action = max(actions,
                              key=lambda action: self.minimax(game_state.generate_successor(self.index, action), 0, 0))
-            print('eval time for agent %d: %.4f' % (self.index, time.time() - start))
+            # print('eval time for agent %d: %.4f' % (self.index, time.time() - start))
             return max_action
 
         # Otherwise run the normal evaluation
@@ -444,40 +918,40 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
                 'distance_to_target': -1,
                 'return_to_start': -1000}
 
-class DefensiveReflexAgent(ReflexCaptureAgent):
-    """
-    A reflex agent that keeps its side Pacman-free. Again,
-    this is to give you an idea of what a defensive agent
-    could be like.  It is not the best or only way to make
-    such an agent.
-    """
+# class DefensiveReflexAgent(ReflexCaptureAgent):
+#     """
+#     A reflex agent that keeps its side Pacman-free. Again,
+#     this is to give you an idea of what a defensive agent
+#     could be like.  It is not the best or only way to make
+#     such an agent.
+#     """
 
-    def get_features(self, game_state, action):
-        features = util.Counter()
-        successor = self.get_successor(game_state, action)
-        print(self.index)
+#     def get_features(self, game_state, action):
+#         features = util.Counter()
+#         successor = self.get_successor(game_state, action)
+#         print(self.index)
 
-        my_state = successor.get_agent_state(self.index)
-        my_pos = my_state.get_position()
+#         my_state = successor.get_agent_state(self.index)
+#         my_pos = my_state.get_position()
 
-        # Computes whether we're on defense (1) or offense (0)
-        print("Is PacMan", my_state.is_pacman)
-        features['on_defense'] = 1
-        if my_state.is_pacman: features['on_defense'] = 0
+#         # Computes whether we're on defense (1) or offense (0)
+#         print("Is PacMan", my_state.is_pacman)
+#         features['on_defense'] = 1
+#         if my_state.is_pacman: features['on_defense'] = 0
 
-        # Computes distance to invaders we can see
-        enemies = [successor.get_agent_state(i) for i in self.get_opponents(successor)]
-        invaders = [a for a in enemies if a.is_pacman and a.get_position() is not None]
-        features['num_invaders'] = len(invaders)
-        if len(invaders) > 0:
-            dists = [self.get_maze_distance(my_pos, a.get_position()) for a in invaders]
-            features['invader_distance'] = min(dists)
+#         # Computes distance to invaders we can see
+#         enemies = [successor.get_agent_state(i) for i in self.get_opponents(successor)]
+#         invaders = [a for a in enemies if a.is_pacman and a.get_position() is not None]
+#         features['num_invaders'] = len(invaders)
+#         if len(invaders) > 0:
+#             dists = [self.get_maze_distance(my_pos, a.get_position()) for a in invaders]
+#             features['invader_distance'] = min(dists)
 
-        if action == Directions.STOP: features['stop'] = 1
-        rev = Directions.REVERSE[game_state.get_agent_state(self.index).configuration.direction]
-        if action == rev: features['reverse'] = 1
+#         if action == Directions.STOP: features['stop'] = 1
+#         rev = Directions.REVERSE[game_state.get_agent_state(self.index).configuration.direction]
+#         if action == rev: features['reverse'] = 1
 
-        return features
+#         return features
 
-    def get_weights(self, game_state, action):
-        return {'num_invaders': -1000, 'on_defense': 100, 'invader_distance': -10, 'stop': -100, 'reverse': -2}
+#     def get_weights(self, game_state, action):
+#         return {'num_invaders': -1000, 'on_defense': 100, 'invader_distance': -10, 'stop': -100, 'reverse': -2}
