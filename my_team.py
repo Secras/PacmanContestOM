@@ -344,7 +344,8 @@ class DefensiveAgent(CaptureAgent):
         if len(invaders) == 1:
             # print("-----------------------------")
             # I see one enemy
-            if util.manhattan_distance(my_pos, invaders[0].get_position()) == 1:
+            scared = game_state.get_agent_state(self.index).scared_timer > 0
+            if util.manhattan_distance(my_pos, invaders[0].get_position()) == 1 and not scared:
                 return self.get_direction_enemy(my_pos, invaders[0].get_position())
             legal_actions = game_state.get_legal_actions(0)
             max_action = 'Stop'
