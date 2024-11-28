@@ -502,22 +502,6 @@ class DefensiveAgent(CaptureAgent):
         else:
             return False
 
-    def breadth_first_search(problem):
-        start = SearchNode(None, (problem.get_start_state(), None, 0))
-        queue = util.Queue()
-        visited = set()
-
-        queue.push(start)
-
-        while not queue.is_empty():
-            current_node = queue.pop()
-            if problem.is_goal_state(current_node.state):
-                return current_node.get_path()
-            if current_node.state not in visited:
-                visited.add(current_node.state)
-                for successor in problem.get_successors(current_node.state):
-                    queue.push(SearchNode(current_node, successor))
-                    
 ##############################################
 # Oliver's Part#
 
