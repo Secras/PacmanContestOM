@@ -331,6 +331,10 @@ class DefensiveAgent(CaptureAgent):
     
     
     def choose_action(self, game_state):
+        
+        food_eaten = self.compare_foods(game_state)
+        self.features['prev_food'] = set(self.get_food_you_are_defending(game_state).as_list())
+        
         my_pos = game_state.get_agent_state(self.index).get_position()
         enemies = [game_state.get_agent_state(i) for i in self.get_opponents(game_state)]
         invaders = [a for a in enemies if a.is_pacman and a.get_position() is not None]
@@ -384,9 +388,9 @@ class DefensiveAgent(CaptureAgent):
             return max_action
         else:
             # I don't see an enemy 
-            if self.compare_foods(game_state):
+            if food_eaten:
                 # food was eaten => go to the crime scene
-                self.features['dest'] = self.compare_foods
+                self.features['dest'] = food_eaten
             if self.features.get('dest', my_pos) == my_pos:
                 # I have a previous goal
                 do = True
