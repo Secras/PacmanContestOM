@@ -41,8 +41,8 @@ When ghosts get scared:
 
 How to find food?
 - (DONE) Try to find food clusters, first near the edge.
-- Don't get too greedy, how far is it to the next food cluster and how far is it back?
-- When he eats a power capsule he gets greedy and is allowed further back, until he eats a ghost, then the timer gets reduced on the amount of team he has left to get back to base.
+- (DONE) Don't get too greedy, how far is it to the next food cluster and how far is it back?
+- (DONE) When he eats a power capsule he gets greedy and is allowed further back, until he eats a ghost, then the timer gets reduced on the amount of team he has left to get back to base.
 
 When to go back?
 - (DONE) If we have the min amount of food then go back over the edge.
@@ -54,7 +54,14 @@ Completed Strategy:
 - We start by going to the biggest food cluster that is closest to the edge of the enemy base
 - If PacMan eats 4 food items in a row, we go back to our base with the food
 - If we are in the enemy base, and we see a ghost, we run away from the ghost (doesn't matter to where now)
+- If capsule is eaten, we proiritize finding the biggest food clusters and remove the max 4 food eaten rule and avoiding ghosts.
+- Minimax (not with alpha/beta pruning) implemented for escaping ghosts
+  - We predict that the ghost will move towards us, and we move away from the ghost
+  - If food eaten is less than 2 then we will not prioritize running to the base, only avoid the ghost
 
 TODO:
-- Big thing is to find an algorithm to rank or make sure the PacMan when fleeing from a ghost doesn't go into a corner where he can't get out.
-  - Or basically make a better escape plan when ghost is nearby
+- Try alpha/beta pruning for minimax to be able to increase the depth of the search
+- Food cluster selection
+  - Being able to stick to one cluster at a time so it can be switched if something happens
+  - Or for selecting random cluster to decrease predictability
+- Turn into defensive agent when food from our team is low
