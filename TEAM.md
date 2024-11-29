@@ -11,7 +11,7 @@
 **Team members:**
 
 249845 - Markus Baier - markus.baier01@estudiant.upf.edu - Secras
-249844 - Oliver Ingvarsson - - OliverO15
+249844 - Oliver Ingvarsson - oliver.ingvarsson01@estudiant.upf.edu - OliverO15
 * Student 1's Student number - Full Name - Student email - Student Github id
 
 Replace the lines above with the correct details of members. Delete or add lines as needed.
