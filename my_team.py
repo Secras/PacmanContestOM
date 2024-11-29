@@ -883,6 +883,9 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
         # Compute distance to the nearest food item
         if len(food_list) > 0:
             my_pos = successor.get_agent_state(self.index).get_position()
+            
+            if self.chosen_food in game_state.get_walls().as_list():
+                self.chosen_food = None
 
             if self.countdown == 0 or self.chosen_food is None:
                 nearest_food = ranked_clusters[0]["cluster"][0]
