@@ -6,13 +6,13 @@
 
 **Instructor:** _[name of your instructor]_
 
-**Team name:** _[replace this with team name in plan text]_
+**Team name:** Neural Nom Nom
 
 **Team members:**
 
+249845 - Markus Baier - markus.baier01@estudiant.upf.edu - Secras
+249844 - Oliver Ingvarsson - - OliverO15
 * Student 1's Student number - Full Name - Student email - Student Github id
-* Student 2's Student number - Full Name - Student email - Student Github id
-* Student 3's Student number - Full Name - Student email - Student Github id
 
 Replace the lines above with the correct details of members. Delete or add lines as needed.
 
