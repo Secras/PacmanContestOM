@@ -593,7 +593,6 @@ class ReflexCaptureAgent(CaptureAgent):
         """
         return {'successor_score': 1.0}
 
-
 class OffensiveReflexAgent(ReflexCaptureAgent):
     def __init__(self, index, time_for_computing=.1):
         super().__init__(index, time_for_computing)
@@ -620,7 +619,7 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
 
     def analyse_movement(self):
         """Analyse the agent's movement to detect patterns. Goal is to avoid getting stuck in a loop when by the edge
-            and waiting for the ghost to go away. ! Needs improvements
+            and waiting for the ghost to go away.
         """
 
         if self.cooldown > 0:
@@ -630,16 +629,10 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
         if len(self.positions_record) < self.record_threshold:
             return
 
-        # Check if the agent is moving in the same four locations
-        if len(set(self.positions_record[-4:])) == 1:
+        if len(set(self.positions_record)) < 3:
             self.agent_stuck = True
+            self.positions_record = []
             return
-
-        # Check for looping patterns (e.g., same sequence of moves)
-        for i in range(1, len(self.positions_record) // 2 + 1):
-            if self.positions_record[-i:] == self.positions_record[-2 * i:-i]:
-                self.agent_stuck = True
-                return
 
         self.agent_stuck = False
 
@@ -697,6 +690,7 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
             enemy_state = game_state.get_agent_state(enemy)
             if not enemy_state.is_pacman and enemy_state.get_position() is not None:
                 agents.append(enemy)
+                break
 
         next_depth = current_depth
         next_agent = agent_index
@@ -718,7 +712,8 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
             return 1000
 
         actions = game_state.get_legal_actions(agents[agent_index])
-        action_evals = [self.minimax(game_state.generate_successor(agents[agent_index], action), next_depth, next_agent) for action in actions]
+        action_evals = [self.minimax(game_state.generate_successor(agents[agent_index], action), next_depth, next_agent)
+                        for action in actions]
 
         if agent_index == 0:
             # pacman moves (MAX)
@@ -732,23 +727,22 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
         Picks among the actions with the highest Q(s,a).
         """
         # Analyse the agent's movement
-        # curr_pos = game_state.get_agent_position(self.index)
-        # self.update_recent_positions(curr_pos)
-        # self.analyse_movement()
-        #
-        # is_pacman = game_state.get_agent_state(self.index).is_pacman
-        # if self.agent_stuck and not is_pacman and self.cooldown == 0:
-        #     print('Agent is stuck.')
-        #     self.target_cluster_index = (self.target_cluster_index + 1) % 3
-        #     print('Target cluster index:', self.target_cluster_index)
-        #     self.cooldown = self.cooldown_threshold
+        curr_pos = game_state.get_agent_position(self.index)
+        self.update_recent_positions(curr_pos)
+        self.analyse_movement()
+
+        is_pacman = game_state.get_agent_state(self.index).is_pacman
+        is_stuck = False
+        if self.agent_stuck:
+            print('Agent is stuck.')
+            is_stuck = True
 
         actions = game_state.get_legal_actions(self.index)
         start = time.time()
 
         # Run MiniMax if ghost is nearby
         ghost_distance = self.ghost_distance(game_state)
-        if ghost_distance > 0 and not self.capsule_active:
+        if ghost_distance > 0 and not self.capsule_active and not is_stuck:
             max_action = max(actions,
                              key=lambda action: self.minimax(game_state.generate_successor(self.index, action), 0, 0))
             # print('eval time for agent %d: %.4f' % (self.index, time.time() - start))
@@ -862,7 +856,8 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
         invaders = [a for a in enemies if not a.is_pacman and a.get_position() is not None]
 
         if len(invaders) > 0:
-            dists = [self.get_maze_distance(successor.get_agent_state(self.index).get_position(), a.get_position()) for a in invaders]
+            dists = [self.get_maze_distance(successor.get_agent_state(self.index).get_position(), a.get_position()) for
+                     a in invaders]
             return min(dists)
         return 0
 
@@ -877,9 +872,11 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
         food_clusters = self.form_food_clusters(food_list, 3)
 
         if self.capsule_active:  # Prioritize bigger food clusters and ignore the rest
-            ranked_clusters = self.rank_clusters(food_clusters, successor.get_agent_state(self.index).get_position(), self.red, w1=1, w2=2, w3=0)
+            ranked_clusters = self.rank_clusters(food_clusters, successor.get_agent_state(self.index).get_position(),
+                                                 self.red, w1=1, w2=2, w3=0)
         else:
-            ranked_clusters = self.rank_clusters(food_clusters, successor.get_agent_state(self.index).get_position(), self.red)
+            ranked_clusters = self.rank_clusters(food_clusters, successor.get_agent_state(self.index).get_position(),
+                                                 self.red)
 
         features['successor_score'] = -len(food_list)
 
@@ -898,6 +895,9 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
 
         if self.food_eaten > 3 and not self.capsule_active:
             features['distance_to_target'] = self.get_maze_distance(my_pos, self.start)
+
+        if self.agent_stuck:
+            features['return_to_start'] = self.get_maze_distance(my_pos, self.start)
 
         return features
 
